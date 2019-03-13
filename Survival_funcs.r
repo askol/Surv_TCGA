@@ -26,7 +26,8 @@ get.data <- function(project, DataDir){
     }
 
     meta <- get.surv.data(project, case.ids)
-
+    meta$gender <- as.factor(meta$gender)
+    
     ## THREE POSSIBLE DATA TYPES ##
     ## 1) lcpm,
     ## 2) inverseNormal expression,
@@ -44,7 +45,7 @@ get.data <- function(project, DataDir){
     zRmBat <- as.data.frame(t(zRmBat))
     zRmBat$ID <- rownames(zRmBat)
     zRmBat <- merge(zRmBat, meta, by.x="ID", by.y="case_id", all=T)
-
+    
     form <- paste("~", paste(covs, collapse="+"))
     design <- model.matrix(eval(parse(text=form)), data=data$sample)
     v <- voom(data, design, plot=F)   
@@ -149,21 +150,21 @@ calc.surv <- function(data, project, OutDir, prefix, gene.info, use.covs=FALSE){
             if (length(covs) > max.covs){
                 
                 covs.use <- covs[1:max.covs]
+                if (sex == "all"){
+                    covs.use <- c(covs.use, "gender")
+                }
             }
         
             cov.ind <- which(names(d) %in% covs.use)
             
-            if (length(covs.use) > 0){
-                eval(parse(text = paste0("srv <- lapply(gene.ind, function(x) ",
-                               "coxph(s ~ d[,x] + ",
-                               paste( paste0("d$", covs.use), collapse="+"),"))")))
-            }else{
-                srv <- lapply(gene.ind, function(x) coxph(s ~ d[,x]))
-            
-            }
+            eval(parse(text = paste0("srv <- lapply(gene.ind, function(x) ",
+                           "coxph(s ~ d[,x] + ",
+                           paste( paste0("d$", covs.use), collapse="+"),"))")))
         }else{
-            srv <- lapply(gene.ind, function(x)                                
-                          coxph(s ~ d[,x]))
+            ifelse(sex != "all",
+                   srv <- lapply(gene.ind, function(x) coxph(s ~ d[,x])),
+                   srv <- lapply(gene.ind, function(x) coxph(s ~ d[,x] + d[,"gender"]))  )
+                                 
         }
         
         srv <- lapply(srv, summary)
@@ -256,3 +257,9 @@ get.best.covs  <- function(d, cov.names, sig.thresh=0.05){
     return(sig.covs)
 }
  
+inverse_quantile_normalization <- function(gct) {
+        gct = t(apply(gct, 1, rank, ties.method = "average"));
+        gct = qnorm(gct / (ncol(gct)+1));
+        return(gct)
+}
+
